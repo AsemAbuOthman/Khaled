@@ -288,7 +288,7 @@ body.dark-mode .request-card {
     width: 100%;
   }
 }
-
+  
     </style>
 </head>
 
