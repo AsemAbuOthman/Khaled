@@ -2,12 +2,45 @@
 session_start();
 include("../main/partials/header-1.php");
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'lender') {
+if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
 
 include __DIR__ . '../../database/db.php'; 
+
+// Handle role switching
+if (isset($_POST['switch_role'])) {
+    $user_id = $_SESSION['user_id'];
+    $new_role = ($_SESSION['role'] == 'lender') ? 'user' : 'lender';
+    
+    // Update role in database
+    $stmt = $conn->prepare("UPDATE users SET role = ? WHERE user_id = ?");
+    $stmt->bind_param("si", $new_role, $user_id);
+    $stmt->execute();
+    $stmt->close();
+    
+    // Update session
+    $_SESSION['role'] = $new_role;
+    
+    // Store original role if switching for the first time
+    if (!isset($_SESSION['original_role'])) {
+        $_SESSION['original_role'] = ($new_role == 'user') ? 'lender' : 'user';
+    }
+    
+    // Redirect to appropriate dashboard
+    if ($_SESSION['role'] == 'lender') {
+        header("Location: lender_dashboard.php");
+    } else {
+        header("Location: ../index.php");
+    }
+    exit;
+}
+
+// Store original role if switching for the first time
+if (!isset($_SESSION['original_role']) && $_SESSION['role'] == 'lender') {
+    $_SESSION['original_role'] = 'lender';
+}
 
 $users_count = $conn->query("SELECT COUNT(*) FROM users")->fetch_row()[0];
 $requests_count = $conn->query("SELECT COUNT(*) FROM reservations")->fetch_row()[0];
@@ -24,13 +57,12 @@ $recent_requests = $conn->query("SELECT r.user_id, u.first_name, i.item_id, i.na
 $conn->close();
 ?>
 
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة تحكم المدير</title>
+<title>لوحة تحكم الممول</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -102,6 +134,7 @@ $conn->close();
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-wrap: wrap;
     }
     
     .user-info {
@@ -360,6 +393,7 @@ $conn->close();
     font-weight: 600;
     text-align: center;
     display: inline-block;
+    min-width: 90px;
     }
     
     .status-pending {
@@ -457,6 +491,60 @@ $conn->close();
     color: white;
     }
     
+    /* Role Switch Button */
+    .role-switch-container {
+        position: relative;
+    }
+    
+    .role-switch-btn {
+        background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 50px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-family: 'Tajawal', sans-serif;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: var(--transition);
+        box-shadow: 0 4px 15px rgba(140, 104, 205, 0.3);
+        white-space: nowrap;
+    }
+    
+    .role-switch-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(140, 104, 205, 0.4);
+    }
+    
+    .role-switch-btn i {
+        transition: transform 0.3s ease;
+    }
+    
+    .role-switch-btn:hover i {
+        transform: rotate(180deg);
+    }
+    
+    /* Role Indicator */
+    .role-indicator {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: var(--success);
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: bold;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
     @media (max-width: 768px) {
     .dashboard-header {
         flex-direction: column;
@@ -467,10 +555,43 @@ $conn->close();
     .header-right {
         width: 100%;
         justify-content: space-between;
+        flex-wrap: wrap;
+    }
+    
+    .role-switch-container {
+        order: 3;
+        width: 100%;
+        margin-top: 1rem;
+    }
+    
+    .role-switch-btn {
+        width: 100%;
+        justify-content: center;
     }
     
     .summary-cards {
         grid-template-columns: 1fr;
+    }
+    
+    .user-info {
+        margin-right: auto;
+    }
+    }
+    
+    @media (max-width: 480px) {
+    .header-right {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .user-info {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .notification {
+        align-self: flex-end;
     }
     }
 </style>
@@ -481,27 +602,38 @@ $conn->close();
 <!-- Dashboard Header -->
 <div class="dashboard-header">
     <div class="header-left">
-    <h1>لوحة تحكم المدير</h1>
-    <p>مرحبًا بك في مركز التحكم الخاص بالنظام، يمكنك إدارة كافة الجوانب من هنا</p>
+    <h1>لوحة تحكم الممول</h1>
+    <p>مرحبًا بك في مركز التحكم الخاص بك، يمكنك إدارة عروضك وطلبات الإعارة من هنا</p>
     </div>
     <div class="header-right">
     <div class="user-info">
         <div class="user-avatar">
         <?php 
-            $name = $_SESSION['username'] ?? 'المدير';
+            $name = $_SESSION['username'] ?? 'المستخدم';
             $initials = mb_substr($name, 0, 1, 'UTF-8');
             echo $initials;
         ?>
         </div>
         <div class="user-text">
-        <h3><?php echo $name; ?></h3>
-        <p>مدير النظام</p>
+        <h3><?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?></h3>
+        <p><?= ($_SESSION['role'] == 'lender') ? 'ممول' : 'مستخدم' ?></p>
         </div>
     </div>
     <div class="notification">
         <button style="background: white; border: none; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: var(--card-shadow);">
         <i class="fas fa-bell" style="color: var(--primary); font-size: 1.2rem;"></i>
         </button>
+    </div>
+    <div class="role-switch-container">
+        <form method="post">
+            <button type="submit" name="switch_role" class="role-switch-btn">
+                <i class="fas fa-sync-alt"></i>
+                <?= ($_SESSION['role'] == 'lender') ? 'التبديل إلى دور المستخدم' : 'العودة إلى دور الممول' ?>
+            </button>
+            <div class="role-indicator">
+                <?= ($_SESSION['role'] == 'lender') ? 'M' : 'U' ?>
+            </div>
+        </form>
     </div>
     </div>
 </div>
@@ -583,8 +715,8 @@ $conn->close();
             <i class="fas fa-user"></i>
             </div>
             <div class="recent-content">
-            <div class="recent-title"><?= $user['first_name'] ?></div>
-            <div class="recent-subtitle"><?= $user['email'] ?></div>
+            <div class="recent-title"><?= htmlspecialchars($user['first_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="recent-subtitle"><?= htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
             </div>
             <div class="recent-time">
             <?= date('Y-m-d', strtotime($user['created_at'])) ?>
@@ -613,8 +745,8 @@ $conn->close();
             <i class="fas fa-file-alt"></i>
             </div>
             <div class="recent-content">
-            <div class="recent-title">طلب #<?= $request['item_id'] ?> - <?= $request['item_name'] ?></div>
-            <div class="recent-subtitle">بواسطة: <?= $request['item_name'] ?></div>
+            <div class="recent-title">طلب #<?= htmlspecialchars($request['item_id'] ?? '', ENT_QUOTES, 'UTF-8') ?> - <?= htmlspecialchars($request['item_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
+            <div class="recent-subtitle">بواسطة: <?= htmlspecialchars($request['first_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
             </div>
             <div class="status-badge <?= $status_class ?>">
             <?php 

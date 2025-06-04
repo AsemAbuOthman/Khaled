@@ -1,5 +1,5 @@
-./Dockerfile
-./docker-compose.yml
-./mysql_data
-./main/uploads/
-!./main/uploads/documents
+Dockerfile
+docker-compose.yml
+mysql_data
+main/uploads/
+main/uploads/documents

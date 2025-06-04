@@ -12,15 +12,14 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'lender') {
 $lender_id = $_SESSION['user_id'];
 $item_id   = intval($_GET['item_id'] ?? 0);
 
-
 // Display messages
 if (isset($_SESSION['success'])) {
-  echo "<div class='alert success'>" . htmlspecialchars($_SESSION['success']) . "</div>";
-  unset($_SESSION['success']);
+    $success_message = htmlspecialchars($_SESSION['success']);
+    unset($_SESSION['success']);
 }
 if (isset($_SESSION['error'])) {
-  echo "<div class='alert error'>" . htmlspecialchars($_SESSION['error']) . "</div>";
-  unset($_SESSION['error']);
+    $error_message = htmlspecialchars($_SESSION['error']);
+    unset($_SESSION['error']);
 }
 
 // Fetch item + owner
@@ -35,7 +34,8 @@ $stmt->bind_param("i", $item_id);
 $stmt->execute();
 $item = $stmt->get_result()->fetch_assoc();
 if (!$item) {
-    echo "<p class='alert'>الأداة غير موجودة.</p>"; exit;
+    echo "<p class='alert'>الأداة غير موجودة.</p>"; 
+    exit;
 }
 
 // Pagination & filter
@@ -44,7 +44,7 @@ $filter    = in_array($_GET['status'] ?? '', ['pending','accepted','rejected'])
                : '';
 $page      = max(1, intval($_GET['page'] ?? 1));
 $perPage   = 6;
-$offset    = ($page -1)*$perPage;
+$offset    = ($page - 1) * $perPage;
 
 // Count total reservations
 $countSql  = "SELECT COUNT(*) FROM reservations WHERE item_id=?" 
@@ -95,192 +95,480 @@ function arabic_ago($date) {
     return floor($diff/86400) . " يوم مضى";
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>تفاصيل الأداة</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* Improved CSS */
     :root {
-      --primary: #4CAF50;
-      --secondary: #2196F3;
-      --danger: #f44336;
-      --gray: #607D8B;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
+      --primary: #4361ee;
+      --primary-dark: #3a56d4;
+      --secondary: #3f37c9;
+      --accent: #4cc9f0;
+      --success: #4ade80;
+      --danger: #f43f5e;
+      --warning: #f59e0b;
+      --gray-100: #f8f9fa;
+      --gray-200: #e9ecef;
+      --gray-300: #dee2e6;
+      --gray-700: #495057;
+      --gray-900: #212529;
+      --radius: 12px;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      --transition: all 0.3s ease;
     }
 
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: #f5f7ff;
+      color: var(--gray-900);
+      line-height: 1.6;
+    }
 
     .container {
       max-width: 1200px;
-      margin: 20px auto;
-      padding: 0 15px;
+      margin: 30px auto;
+      padding: 0 20px;
     }
 
     .card {
       background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      padding: 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 30px;
+      margin-bottom: 30px;
+      transition: var(--transition);
+    }
+
+    .card:hover {
+      box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+    }
+
+    h2, h3 {
+      color: var(--primary-dark);
       margin-bottom: 20px;
+      position: relative;
+      padding-bottom: 10px;
     }
 
-    .item-details .image-wrapper {
-      max-width: 400px;
-      margin: 0 auto 20px;
+    h2:after, h3:after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--primary));
+      border-radius: 3px;
     }
 
-    .item-details img {
+    .item-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+
+    .image-wrapper {
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--gray-100);
+    }
+
+    .image-wrapper img {
       width: 100%;
-      height: auto;
-      border-radius: 4px;
+      height: 100%;
+      object-fit: contain;
+      transition: transform 0.5s ease;
     }
 
-    .info-group p {
-      margin: 10px 0;
-      font-size: 16px;
+    .image-wrapper:hover img {
+      transform: scale(1.05);
+    }
+
+    .info-group {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .info-item {
+      display: flex;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .info-item:last-child {
+      border-bottom: none;
     }
 
     .label {
-      font-weight: bold;
-      color: var(--gray);
-      min-width: 80px;
-      display: inline-block;
+      font-weight: 600;
+      color: var(--primary-dark);
+      width: 120px;
+      flex-shrink: 0;
+    }
+
+    .value {
+      flex-grow: 1;
     }
 
     .status {
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-weight: bold;
-    }
-
-    .status.available { background: #E8F5E9; color: #2E7D32; }
-    .status.unavailable { background: #FFEBEE; color: #C62828; }
-
-    .reservations-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 20px 0;
-      display: table;
-    }
-
-    .reservations-table th,
-    .reservations-table td {
-      padding: 12px;
-      text-align: right;
-      border-bottom: 1px solid #ddd;
-    }
-
-    .reservations-table th {
-      background: #f5f5f5;
-    }
-
-    .status-badge {
-      padding: 4px 8px;
-      border-radius: 12px;
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 600;
       font-size: 14px;
     }
 
-    .status-badge.pending { background: #FFF3E0; color: #EF6C00; }
-    .status-badge.accepted { background: #E8F5E9; color: #2E7D32; }
-    .status-badge.rejected { background: #FFEBEE; color: #C62828; }
+    .status.available {
+      background: rgba(76, 201, 240, 0.15);
+      color: #0ea5e9;
+    }
+
+    .status.unavailable {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--danger);
+    }
+
+    .actions {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
 
     .btn {
       display: inline-flex;
       align-items: center;
-      padding: 8px 16px;
-      border-radius: 4px;
-      text-decoration: none;
-      font-weight: 500;
-      transition: all 0.3s;
-      border: 1px solid transparent;
-    }
-
-    .btn.outline {
-      border-color: var(--primary);
-      color: var(--primary);
-    }
-
-    .btn.small {
-      padding: 4px 8px;
-      font-size: 14px;
-    }
-
-    .btn.accept { background: #E8F5E9; color: #2E7D32; }
-    .btn.reject { background: #FFEBEE; color: #C62828; }
-
-    .btn:hover {
-      filter: brightness(90%);
-    }
-
-    .pagination {
-      margin-top: 20px;
-      display: flex;
-      gap: 8px;
       justify-content: center;
-    }
-
-    .pagination a {
-      padding: 8px 12px;
-      border-radius: 4px;
-      background: #f5f5f5;
-      color: #333;
+      padding: 12px 24px;
+      border-radius: 8px;
       text-decoration: none;
+      font-weight: 600;
+      transition: var(--transition);
+      border: none;
+      cursor: pointer;
+      gap: 8px;
+      font-size: 15px;
     }
 
-    .pagination a.current {
+    .btn-primary {
       background: var(--primary);
       color: white;
     }
 
-    /* Mobile Cards */
-    .reservation-card {
-      display: none;
-      background: #fff;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 10px 0;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
     }
 
-    .reservation-card div {
-      margin: 6px 0;
+    .btn-outline {
+      background: transparent;
+      color: var(--primary);
+      border: 2px solid var(--primary);
+    }
+
+    .btn-outline:hover {
+      background: rgba(67, 97, 238, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-small {
+      padding: 8px 16px;
+      font-size: 14px;
+    }
+
+    .filter-bar {
       display: flex;
       justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .filter-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .filter-select {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 2px solid var(--gray-200);
+      background: white;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--gray-700);
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    .filter-select:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+
+    .reservations-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .reservations-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 20px 0;
+      display: table;
+    }
+
+    .reservations-table th {
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+      text-align: right;
+      padding: 16px 20px;
+    }
+
+    .reservations-table th:first-child {
+      border-top-right-radius: var(--radius);
+    }
+
+    .reservations-table th:last-child {
+      border-top-left-radius: var(--radius);
+    }
+
+    .reservations-table td {
+      padding: 16px 20px;
+      text-align: right;
+      border-bottom: 1px solid var(--gray-200);
+      background: white;
+    }
+
+    .reservations-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .reservations-table tr:hover td {
+      background: rgba(67, 97, 238, 0.03);
+    }
+
+    .status-badge {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .status-badge.pending {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .status-badge.accepted {
+      background: rgba(74, 222, 128, 0.15);
+      color: var(--success);
+    }
+
+    .status-badge.rejected {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--danger);
+    }
+
+    .document-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: var(--transition);
+    }
+
+    .document-link:hover {
+      color: var(--secondary);
+      text-decoration: underline;
+    }
+
+    .reservation-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-form {
+      margin: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--gray-700);
+    }
+
+    .empty-state i {
+      font-size: 48px;
+      color: var(--gray-300);
+      margin-bottom: 15px;
+    }
+
+    .empty-state p {
+      font-size: 18px;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 30px;
+    }
+
+    .pagination a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: white;
+      color: var(--gray-700);
+      text-decoration: none;
+      font-weight: 600;
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+
+    .pagination a:hover, .pagination a.current {
+      background: var(--primary);
+      color: white;
+    }
+
+    .reservation-card {
+      display: none;
+      background: white;
+      border-radius: var(--radius);
+      padding: 20px;
+      margin: 15px 0;
+      box-shadow: var(--shadow);
+    }
+
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .card-row:last-child {
+      border-bottom: none;
+    }
+
+    .mobile-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .alert {
+      padding: 16px 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .alert.success {
+      background-color: rgba(74, 222, 128, 0.15);
+      color: #15803d;
+      border-left: 4px solid var(--success);
+    }
+
+    .alert.error {
+      background-color: rgba(244, 63, 94, 0.15);
+      color: var(--danger);
+      border-left: 4px solid var(--danger);
+    }
+
+    @media (max-width: 900px) {
+      .item-details {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 768px) {
-      .reservations-table { display: none; }
-      .reservation-card { display: block; }
+      .reservations-table { 
+        display: none; 
+      }
+      .reservation-card { 
+        display: block; 
+      }
+      .filter-bar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .card {
+        padding: 20px;
+      }
     }
-    .alert {
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 5px;
-    font-weight: bold;
-}
 
-.alert.success {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-
-.alert.error {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
+    @media (max-width: 480px) {
+      .actions {
+        flex-direction: column;
+      }
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Success/Error Messages -->
+    <?php if (!empty($success_message)): ?>
+      <div class="alert success">
+        <i class="fas fa-check-circle"></i>
+        <div><?= $success_message ?></div>
+      </div>
+    <?php endif; ?>
+    
+    <?php if (!empty($error_message)): ?>
+      <div class="alert error">
+        <i class="fas fa-exclamation-circle"></i>
+        <div><?= $error_message ?></div>
+      </div>
+    <?php endif; ?>
 
     <!-- Item Details -->
     <section class="card item-details">
@@ -288,48 +576,72 @@ function arabic_ago($date) {
         <div class="image-wrapper">
           <img src="<?= htmlspecialchars($item['image']) ?>" alt="صورة الأداة">
         </div>
+      <?php else: ?>
+        <div class="image-wrapper" style="background: #f0f4ff; display: flex; align-items: center; justify-content: center;">
+          <i class="fas fa-image" style="font-size: 3rem; color: #a0aec0;"></i>
+        </div>
       <?php endif; ?>
-      <h2><?= htmlspecialchars($item['name']) ?></h2>
-      <div class="info-group">
-        <p><span class="label">الوصف:</span> <?= htmlspecialchars($item['description']) ?></p>
-        <p><span class="label">الحالة:</span> <?= htmlspecialchars($item['status']) ?></p>
-        <p>
-          <span class="label">التوفر:</span>
-          <?php if ($item['reserve_status']==='available'): ?>
-            <span class="status available">متاحة</span>
-          <?php else: ?>
-            <span class="status unavailable">محجوزة</span>
+      
+      <div class="info-content">
+        <h2><?= htmlspecialchars($item['name']) ?></h2>
+        <div class="info-group">
+          <div class="info-item">
+            <span class="label">الوصف:</span>
+            <span class="value"><?= htmlspecialchars($item['description']) ?></span>
+          </div>
+          <div class="info-item">
+            <span class="label">الحالة:</span>
+            <span class="value"><?= htmlspecialchars($item['status']) ?></span>
+          </div>
+          <div class="info-item">
+            <span class="label">التوفر:</span>
+            <span class="value">
+              <?php if ($item['reserve_status'] === 'available'): ?>
+                <span class="status available">متاحة</span>
+              <?php else: ?>
+                <span class="status unavailable">محجوزة</span>
+              <?php endif; ?>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="label">المالك:</span>
+            <span class="value"><?= htmlspecialchars($item['owner_name']) ?></span>
+          </div>
+        </div>
+        
+        <div class="actions">
+          <a href="my_items.php" class="btn btn-primary">
+            <i class="fas fa-arrow-right"></i>
+            رجوع إلى قائمة الأدوات
+          </a>
+          <?php if ($_SESSION['user_id'] === $item['user_id'] || $_SESSION['role'] === 'admin'): ?>
+            <a href="edit_item.php?item_id=<?= $item_id ?>" class="btn btn-outline">
+              <i class="fas fa-edit"></i>
+              تعديل الأداة
+            </a>
           <?php endif; ?>
-        </p>
-        <p><span class="label">المالك:</span> <?= htmlspecialchars($item['owner_name']) ?></p>
-      </div>
-      <div class="actions">
-        <a href="my_items.php" class="btn">🔙 رجوع</a>
-        <?php if ($_SESSION['user_id']===$item['user_id'] || $_SESSION['role']==='admin'): ?>
-          <a href="edit_item.php?item_id=<?= $item_id ?>" class="btn outline">✏️ تعديل</a>
-        <?php endif; ?>
+        </div>
       </div>
     </section>
 
     <!-- Reservations -->
     <section class="card reservations">
-      <h3>طلبات الحجز</h3>
-
-      <!-- Filter -->
-      <div class="filter-bar">
-        <form method="get">
-          <input type="hidden" name="item_id" value="<?= $item_id ?>">
-          <select name="status" onchange="this.form.submit()" class="btn">
-            <option value="">كل الحالات</option>
-            <?php foreach($statusMap as $key=>$lab): ?>
-              <option 
-                value="<?= $key ?>"
-                <?= $filter === $key ? 'selected' : '' ?>>
-                <?= $lab ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </form>
+      <div class="reservations-header">
+        <h3>طلبات الحجز</h3>
+        <div class="filter-controls">
+          <span>عدد الطلبات: <strong><?= $total ?></strong></span>
+          <form method="get" class="filter-form">
+            <input type="hidden" name="item_id" value="<?= $item_id ?>">
+            <select name="status" onchange="this.form.submit()" class="filter-select">
+              <option value="">كل الحالات</option>
+              <?php foreach($statusMap as $key => $lab): ?>
+                <option value="<?= $key ?>" <?= $filter === $key ? 'selected' : '' ?>>
+                  <?= $lab ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </form>
+        </div>
       </div>
 
       <?php if ($total > 0): ?>
@@ -342,7 +654,7 @@ function arabic_ago($date) {
               <th>نهاية الحجز</th>
               <th>المرفقات</th>
               <th>الحالة</th>
-              <th>إجراءات</th>
+              <th>الإجراءات</th>
             </tr>
           </thead>
           <tbody>
@@ -352,18 +664,22 @@ function arabic_ago($date) {
                 $arabic    = $statusMap[$statusKey] ?? $statusKey;
               ?>
               <tr>
-                <td><?= htmlspecialchars($r['first_name'].' '.$r['last_name']) ?></td>
+                <td><?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?></td>
                 <td><?= date('Y/m/d', strtotime($r['start_date'])) ?></td>
                 <td><?= date('Y/m/d', strtotime($r['end_date'])) ?></td>
                 <td>
                   <?php if ($r['documents_path']): ?>
-                    <a href="<?= $r['documents_path'] ?>" target="_blank">عرض المرفق</a>
+                    <a href="<?= $r['documents_path'] ?>" target="_blank" class="document-link">
+                      <i class="fas fa-file-pdf"></i>
+                      عرض المرفق
+                    </a>
                   <?php else: ?>
                     -
                   <?php endif; ?>
                 </td>
                 <td>
                   <span class="status-badge <?= $statusKey ?>">
+                    <i class="fas fa-<?= $statusKey === 'pending' ? 'clock' : ($statusKey === 'accepted' ? 'check-circle' : 'times-circle') ?>"></i>
                     <?= $arabic ?>
                   </span>
                 </td>
@@ -371,12 +687,20 @@ function arabic_ago($date) {
                   <?php if ($statusKey === 'pending'): ?>
                     <form action="accept_reservation.php" method="post" class="btn-form">
                       <input type="hidden" name="reservation_id" value="<?= $r['reservation_id'] ?>">
-                      <button class="btn small accept">قبول</button>
+                      <button class="btn btn-success btn-small">
+                        <i class="fas fa-check"></i>
+                        قبول
+                      </button>
                     </form>
                     <form action="reject_reservation.php" method="post" class="btn-form">
                       <input type="hidden" name="reservation_id" value="<?= $r['reservation_id'] ?>">
-                      <button class="btn small reject">رفض</button>
+                      <button class="btn btn-danger btn-small">
+                        <i class="fas fa-times"></i>
+                        رفض
+                      </button>
                     </form>
+                  <?php else: ?>
+                    <span class="text-muted">تمت المعالجة</span>
                   <?php endif; ?>
                 </td>
               </tr>
@@ -386,25 +710,38 @@ function arabic_ago($date) {
 
         <!-- Cards for mobile -->
         <?php
-          $resResult->data_seek(0); // Reset pointer
+          $resResult->data_seek(0);
           while($r = $resResult->fetch_assoc()):
             $statusKey = $r['status'];
             $arabic    = $statusMap[$statusKey] ?? $statusKey;
         ?>
           <div class="reservation-card">
-            <div><label>الاسم:</label><?= htmlspecialchars($r['first_name'].' '.$r['last_name']) ?></div>
-            <div><label>بداية:</label><?= date('Y/m/d', strtotime($r['start_date'])) ?></div>
-            <div><label>نهاية:</label><?= date('Y/m/d', strtotime($r['end_date'])) ?></div>
-            <div><label>المرفقات:</label>
-              <?php if ($r['documents_path']): ?>
-                <a href="<?= $r['documents_path'] ?>" target="_blank">عرض</a>
-              <?php else: ?>
-                -
-              <?php endif; ?>
+            <div class="card-row">
+              <span>الاسم:</span>
+              <span><?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?></span>
             </div>
-            <div>
-              <label>الحالة:</label>
+            <div class="card-row">
+              <span>بداية الحجز:</span>
+              <span><?= date('Y/m/d', strtotime($r['start_date'])) ?></span>
+            </div>
+            <div class="card-row">
+              <span>نهاية الحجز:</span>
+              <span><?= date('Y/m/d', strtotime($r['end_date'])) ?></span>
+            </div>
+            <div class="card-row">
+              <span>المرفقات:</span>
+              <span>
+                <?php if ($r['documents_path']): ?>
+                  <a href="<?= $r['documents_path'] ?>" target="_blank" class="document-link">عرض المرفق</a>
+                <?php else: ?>
+                  -
+                <?php endif; ?>
+              </span>
+            </div>
+            <div class="card-row">
+              <span>الحالة:</span>
               <span class="status-badge <?= $statusKey ?>">
+                <i class="fas fa-<?= $statusKey === 'pending' ? 'clock' : ($statusKey === 'accepted' ? 'check-circle' : 'times-circle') ?>"></i>
                 <?= $arabic ?>
               </span>
             </div>
@@ -412,11 +749,17 @@ function arabic_ago($date) {
               <div class="mobile-actions">
                 <form action="accept_reservation.php" method="post">
                   <input type="hidden" name="reservation_id" value="<?= $r['reservation_id'] ?>">
-                  <button class="btn small accept">قبول</button>
+                  <button class="btn btn-success btn-small">
+                    <i class="fas fa-check"></i>
+                    قبول
+                  </button>
                 </form>
                 <form action="reject_reservation.php" method="post">
                   <input type="hidden" name="reservation_id" value="<?= $r['reservation_id'] ?>">
-                  <button class="btn small reject">رفض</button>
+                  <button class="btn btn-danger btn-small">
+                    <i class="fas fa-times"></i>
+                    رفض
+                  </button>
                 </form>
               </div>
             <?php endif; ?>
@@ -424,12 +767,16 @@ function arabic_ago($date) {
         <?php endwhile; ?>
 
         <!-- Pagination -->
-        <?php $pages = ceil($total/$perPage); if ($pages>1): ?>
+        <?php 
+          $pages = ceil($total / $perPage); 
+          if ($pages > 1): 
+        ?>
           <div class="pagination">
-            <?php for($p=1;$p<=$pages;$p++): ?>
+            <?php for($p = 1; $p <= $pages; $p++): ?>
               <a 
                 href="?item_id=<?= $item_id ?>&status=<?= $filter ?>&page=<?= $p ?>"
-                class="<?= $p===$page?'current':'' ?>">
+                class="<?= $p === $page ? 'current' : '' ?>"
+              >
                 <?= $p ?>
               </a>
             <?php endfor; ?>
@@ -437,9 +784,25 @@ function arabic_ago($date) {
         <?php endif; ?>
 
       <?php else: ?>
-        <p class="empty">لا يوجد طلبات حتى الآن.</p>
+        <div class="empty-state">
+          <i class="fas fa-inbox"></i>
+          <p>لا يوجد طلبات حتى الآن</p>
+        </div>
       <?php endif; ?>
     </section>
   </div>
+
+  <script>
+    // Add animation to cards on load
+    document.addEventListener('DOMContentLoaded', function() {
+      const cards = document.querySelectorAll('.card');
+      cards.forEach((card, index) => {
+        setTimeout(() => {
+          card.style.opacity = '1';
+          card.style.transform = 'translateY(0)';
+        }, 150 * index);
+      });
+    });
+  </script>
 </body>
 </html>

@@ -1,210 +1,451 @@
-<?php
-ob_start();
-session_start();
-include("../main/partials/header-1.php");
-require_once __DIR__ . '/../database/db.php';
-
-// Redirect if user is not logged in or not admin
-if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit;
-}
-
-// Fetch cities from the database
-$sql = "SELECT city_id, city_name FROM cities ORDER BY city_name";
-$stmt = $conn->prepare($sql);
-$stmt->execute();
-$cities = $stmt->get_result();
-
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $first_name   = trim($_POST['first_name'] ?? '');
-    $second_name  = trim($_POST['second_name'] ?? '');
-    $last_name    = trim($_POST['last_name'] ?? '');
-    $email        = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-    $password     = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $phone        = trim($_POST['phone'] ?? '');
-    $role         = trim($_POST['role'] ?? '');
-    $city_id      = filter_input(INPUT_POST, 'city_id', FILTER_SANITIZE_NUMBER_INT);
-    $location     = trim($_POST['location'] ?? '');
-    $street       = trim($_POST['street'] ?? '');
-
-    // Initialize document URL
-    $document = '';
-    if (!empty($_FILES['document']) && $_FILES['document']['error'] === UPLOAD_ERR_OK) {
-        $fileTmpPath = $_FILES['document']['tmp_name'];
-        $fileName = $_FILES['document']['name'];
-        $fileSize = $_FILES['document']['size'];
-        $fileType = mime_content_type($fileTmpPath);
-
-        $allowedFileTypes = ['application/pdf'];
-        if (in_array($fileType, $allowedFileTypes)) {
-            $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-            $newFileName = uniqid('doc_') . '.' . $fileExtension;
-            $uploadDir = __DIR__ . '/uploads/documents/';
-
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0777, true);
-            }
-
-            $uploadFilePath = $uploadDir . $newFileName;
-            if (move_uploaded_file($fileTmpPath, $uploadFilePath)) {
-                $document = '/uploads/documents/' . $newFileName;
-            } else {
-                exit('Error uploading the document.');
-            }
-        } else {
-            exit('Only PDF files are allowed.');
-        }
-    }
-
-// Check if user already exists by email
-$checkSql = "SELECT user_id FROM users WHERE email = ?";
-$checkStmt = $conn->prepare($checkSql);
-$checkStmt->bind_param("s", $email);
-$checkStmt->execute();
-$checkStmt->store_result();
-
-if ($checkStmt->num_rows > 0) {
-    echo "<p style='color: red;'>A user with this email already exists.</p>";
-} else {
-    // Insert user data into the database
-    $sql = "INSERT INTO users (first_name, second_name, last_name, email, password, phone, role, document, city_id, location, street, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param('ssssssssiss',
-        $first_name,
-        $second_name,
-        $last_name,
-        $email,
-        $password,
-        $phone,
-        $role,
-        $document,
-        $city_id,
-        $location,
-        $street
-    );
-
-    if ($stmt->execute()) {
-        header('Location: all_users.php');
-        exit;
-    } else {
-        echo "<p style='color: red;'>Database Error: " . htmlspecialchars($stmt->error) . "</p>";
-    }
-}
-}
-ob_end_flush();
-
-?>
-
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>إضافة مستخدم جديد</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة مستخدم جديد - لوحة التحكم</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --light-gray: #ecf0f1;
-            --dark-gray: #7f8c8d;
-            --border-radius: 10px;
-            --shadow: 0 2px 5px rgba(0,0,0,0.1);
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #3f37c9;
+            --accent: #4cc9f0;
+            --success: #4ade80;
+            --danger: #f43f5e;
+            --warning: #f59e0b;
+            --gray-100: #f8f9fa;
+            --gray-200: #e9ecef;
+            --gray-300: #dee2e6;
+            --gray-700: #495057;
+            --gray-900: #212529;
+            --radius: 12px;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
         }
-        body {
-            font-family: 'Tajawal', sans-serif;
-            background-color: var(--light-gray);
+
+        * {
             margin: 0;
             padding: 0;
-            color: var(--primary-color);
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+
+        body {
+            background: linear-gradient(135deg, #f5f7ff 0%, #eef2ff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
+            color: var(--gray-900);
+            line-height: 1.6;
         }
-        h2 {
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .header {
             text-align: center;
             margin-bottom: 30px;
-            font-size: 2em;
         }
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+
+        .header h1 {
+            color: var(--primary-dark);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            position: relative;
+            display: inline-block;
+        }
+
+        .header h1:after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            right: 50%;
+            transform: translateX(50%);
+            width: 80px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--primary));
+            border-radius: 2px;
+        }
+
+        .header p {
+            color: var(--gray-700);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+            margin-top: 20px;
+        }
+
+        .form-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .form-card {
             background: white;
-            padding: 20px;
-            border-radius: var(--border-radius);
+            border-radius: var(--radius);
             box-shadow: var(--shadow);
+            padding: 40px;
+            transition: var(--transition);
         }
-        input, select, button {
-            padding: 10px 15px;
-            border-radius: var(--border-radius);
+
+        .form-card:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-title {
+            color: var(--primary);
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--gray-200);
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--gray-700);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 2px solid var(--gray-200);
             font-size: 16px;
-            border: 1px solid var(--dark-gray);
+            transition: var(--transition);
+            background: var(--gray-100);
         }
-        button {
-            background-color: var(--secondary-color);
-            color: white;
+
+        .form-control:focus {
+            border-color: var(--primary);
+            outline: none;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: left 15px center;
+            background-size: 16px 12px;
+            padding-right: 15px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition);
             border: none;
             cursor: pointer;
+            gap: 10px;
+            font-size: 16px;
         }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .back-button {
-            background-color: #7f8c8d;
+
+        .btn-primary {
+            background: var(--primary);
             color: white;
-            text-decoration: none;
-            padding: 10px 15px;
-            border-radius: var(--border-radius);
-            display: inline-block;
-            margin-bottom: 20px;
+            width: 100%;
         }
-        .back-button:hover {
-            background-color: #95a5a6;
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-outline:hover {
+            background: rgba(67, 97, 238, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .back-container {
+            text-align: center;
+            margin-top: 25px;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 2px solid var(--gray-200);
+            background: var(--gray-100);
+            font-size: 16px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .file-upload-label:hover {
+            background: var(--gray-200);
+        }
+
+        .file-upload-label span {
+            color: var(--gray-700);
+        }
+
+        .file-upload-label i {
+            color: var(--primary);
+        }
+
+        .file-input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            right: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .info-text {
+            font-size: 14px;
+            color: var(--gray-700);
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            color: var(--primary);
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        @media (max-width: 900px) {
+            .form-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-card {
+                padding: 30px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .form-card {
+                padding: 25px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>إضافة مستخدم جديد</h2>
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-user-plus"></i>
+                <span>لوحة التحكم</span>
+            </div>
+        </div>
         
-        <!-- Back Button -->
-        <a href="all_users.php" class="back-button">رجوع إلى جميع المستخدمين</a>
-
+        <div class="header">
+            <h1>إضافة مستخدم جديد</h1>
+            <p>املأ النموذج أدناه لإضافة مستخدم جديد إلى النظام. تأكد من صحة جميع البيانات قبل الإرسال.</p>
+        </div>
+        
         <form method="POST" action="" enctype="multipart/form-data">
-            <label>الاسم الأول:</label><input type="text" name="first_name" required><br>
-            <label>الاسم الثاني:</label><input type="text" name="second_name" required><br>
-            <label>الاسم الأخير:</label><input type="text" name="last_name" required><br>
-            <label>البريد الإلكتروني:</label><input type="email" name="email" required><br>
-            <label>كلمة المرور:</label><input type="password" name="password" required><br>
-            <label>رقم الهاتف:</label><input type="text" name="phone" required><br>
-            <label>الدور:</label>
-            <select name="role">
-                <option value="user">مستخدم</option>
-                <option value="admin">مشرف</option>
-                <option value="lender">مُقرض</option>
-            </select><br>
-            <label>المستند (PDF):</label><input type="file" name="document" accept="application/pdf"><br>
-            
-            <!-- Cities Dropdown -->
-            <label>المدينة:</label>
-            <select name="city_id" required>
-                <option value="">-- اختر المدينة --</option>
-                <?php while ($row = $cities->fetch_assoc()): ?>
-                    <option value="<?= $row['city_id'] ?>"><?= htmlspecialchars($row['city_name']) ?></option>
-                <?php endwhile; ?>
-            </select><br>
-
-            <label>الموقع:</label><input type="text" name="location" required><br>
-            <label>الشارع:</label><input type="text" name="street" required><br>
-            <button type="submit">إضافة مستخدم</button>
+            <div class="form-container">
+                <!-- Personal Information Card -->
+                <div class="form-card">
+                    <h2 class="card-title"><i class="fas fa-user-circle"></i> المعلومات الشخصية</h2>
+                    
+                    <div class="form-group">
+                        <label for="first_name"><i class="fas fa-signature"></i> الاسم الأول</label>
+                        <input type="text" id="first_name" name="first_name" class="form-control" placeholder="أدخل الاسم الأول" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="second_name"><i class="fas fa-signature"></i> الاسم الثاني</label>
+                            <input type="text" id="second_name" name="second_name" class="form-control" placeholder="أدخل الاسم الثاني" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="last_name"><i class="fas fa-signature"></i> الاسم الأخير</label>
+                            <input type="text" id="last_name" name="last_name" class="form-control" placeholder="أدخل الاسم الأخير" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email"><i class="fas fa-envelope"></i> البريد الإلكتروني</label>
+                        <input type="email" id="email" name="email" class="form-control" placeholder="example@domain.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password"><i class="fas fa-lock"></i> كلمة المرور</label>
+                        <input type="password" id="password" name="password" class="form-control" placeholder="أنشئ كلمة مرور قوية" required>
+                    </div>
+                </div>
+                
+                <!-- Account Details Card -->
+                <div class="form-card">
+                    <h2 class="card-title"><i class="fas fa-cog"></i> إعدادات الحساب</h2>
+                    
+                    <div class="form-group">
+                        <label for="phone"><i class="fas fa-phone"></i> رقم الهاتف</label>
+                        <input type="text" id="phone" name="phone" class="form-control" placeholder="+966 5X XXX XXXX" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="role"><i class="fas fa-user-tag"></i> الدور</label>
+                        <select id="role" name="role" class="form-control" required>
+                            <option value="">-- اختر دور المستخدم --</option>
+                            <option value="user">مستخدم عادي</option>
+                            <option value="admin">مشرف النظام</option>
+                            <option value="lender">مُقرض أدوات</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="document"><i class="fas fa-file-pdf"></i> المستند (اختياري)</label>
+                        <div class="file-upload">
+                            <label class="file-upload-label">
+                                <span id="file-name">اختر ملف PDF</span>
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </label>
+                            <input type="file" id="document" name="document" class="file-input" accept="application/pdf">
+                        </div>
+                        <p class="info-text"><i class="fas fa-info-circle"></i> يجب أن يكون الملف من نوع PDF فقط</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="city_id"><i class="fas fa-city"></i> المدينة</label>
+                        <select id="city_id" name="city_id" class="form-control" required>
+                            <option value="">-- اختر المدينة --</option>
+                            <option value="1">الرياض</option>
+                            <option value="2">جدة</option>
+                            <option value="3">مكة المكرمة</option>
+                            <option value="4">المدينة المنورة</option>
+                            <option value="5">الدمام</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="location"><i class="fas fa-map-marker-alt"></i> الموقع</label>
+                            <input type="text" id="location" name="location" class="form-control" placeholder="أدخل موقعك" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="street"><i class="fas fa-road"></i> الشارع</label>
+                            <input type="text" id="street" name="street" class="form-control" placeholder="اسم الشارع" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i>
+                        إضافة مستخدم جديد
+                    </button>
+                </div>
+            </div>
         </form>
+        
+        <div class="back-container">
+            <a href="all_users.php" class="btn btn-outline">
+                <i class="fas fa-arrow-right"></i>
+                رجوع إلى قائمة المستخدمين
+            </a>
+        </div>
     </div>
+
+    <script>
+        // File name display
+        document.getElementById('document').addEventListener('change', function(e) {
+            const fileName = e.target.files[0] ? e.target.files[0].name : 'اختر ملف PDF';
+            document.getElementById('file-name').textContent = fileName;
+        });
+        
+        // Form validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const password = document.getElementById('password').value;
+            if (password.length < 8) {
+                alert('كلمة المرور يجب أن تكون على الأقل 8 أحرف');
+                e.preventDefault();
+            }
+            
+            const phone = document.getElementById('phone').value;
+            const saudiPhoneRegex = /^(009665|9665|\+9665|05|5)(5|0|3|6|4|9|1|8|7)([0-9]{7})$/;
+            if (!saudiPhoneRegex.test(phone)) {
+                alert('يرجى إدخال رقم هاتف سعودي صحيح');
+                e.preventDefault();
+            }
+        });
+        
+        // Add animation on load
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.form-card');
+            cards.forEach((card, index) => {
+                setTimeout(() => {
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 200 * index);
+            });
+        });
+    </script>
 </body>
 </html>
