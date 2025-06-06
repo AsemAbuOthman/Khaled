@@ -11,12 +11,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $stmt = $conn->prepare("SELECT user_id, first_name, second_name, last_name, email, password, role FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = $stmt->get_result(); 
 
     if ($result->num_rows === 1) {
         $user = $result->fetch_assoc();
 
-        if (password_verify($password, $user['password'])) {
+        if (password_verify($password, hash: $user['password'])) {
 
             // ✅ Store all user data in session
             $_SESSION['user_id'] = $user['user_id'];

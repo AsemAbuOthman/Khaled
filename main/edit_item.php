@@ -55,7 +55,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // If new image uploaded
     if (isset($_FILES['image']) && $_FILES['image']['error'] === 0) {
         // 2MB max
-        if ($_FILES['image']['size'] > 2 * 1024 * 1024) {
+        if ($_FILES['image']['size'] > 2 * 7680 * 4320) {
             $message = "❌ حجم الصورة أكبر من 2MB.";
         } else {
             $tmp  = $_FILES['image']['tmp_name'];
@@ -77,8 +77,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // Move & then maybe resize
                 if (move_uploaded_file($tmp, $dest_path)) {
                     // Resize if larger than 1024px
-                    if ($width > 1024 || $height > 1024) {
-                        resizeImage($dest_path, 1024, 1024);
+                    if ($width > 7680 || $height > 4320) {
+                        resizeImage($dest_path, 7680 , 4320 );
                     }
                     // Store web-relative path
                     $image_path = "uploads/" . $filename;
@@ -93,8 +93,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($message === "") {
         $update = $conn->prepare(
             "UPDATE items 
-             SET name=?, description=?, status=?, image=? 
-             WHERE item_id=?"
+              SET name=?, description=?, status=?, image=? 
+                WHERE item_id=?"
         );
         $update->bind_param("ssssi", $name, $description, $status, $image_path, $item_id);
         if ($update->execute()) {

@@ -32,7 +32,7 @@ if (isset($_POST['switch_role'])) {
     if ($_SESSION['role'] == 'lender') {
         header("Location: lender_dashboard.php");
     } else {
-        header("Location: ../index.php");
+        header("Location: home.php");
     }
     exit;
 }

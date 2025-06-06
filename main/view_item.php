@@ -60,7 +60,7 @@ $total = $countStmt->get_result()->fetch_row()[0];
 
 // Fetch page of reservations (with borrower's name + any document)
 $resSql = "
-  SELECT r.*, u.first_name, u.last_name, r.documents_path
+  SELECT r.*, u.first_name, u.last_name, u.email, u.phone, u.locationUrl as address, r.documents_path
   FROM reservations r
   JOIN users u ON r.user_id=u.user_id
   WHERE r.item_id=?" 
@@ -519,6 +519,111 @@ function arabic_ago($date) {
       color: var(--danger);
       border-left: 4px solid var(--danger);
     }
+    
+    /* Borrower Profile Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .modal-content {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: 0 5px 30px rgba(0,0,0,0.3);
+      width: 90%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalOpen 0.3s ease;
+    }
+    
+    @keyframes modalOpen {
+      from { opacity: 0; transform: translateY(-30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .modal-header {
+      padding: 20px;
+      background: var(--primary);
+      color: white;
+      border-top-left-radius: var(--radius);
+      border-top-right-radius: var(--radius);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .modal-header h3 {
+      color: white;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .modal-header h3:after {
+      display: none;
+    }
+    
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0 10px;
+    }
+    
+    .modal-body {
+      padding: 25px;
+    }
+    
+    .profile-info {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    .profile-row {
+      display: flex;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+    
+    .profile-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    
+    .profile-label {
+      width: 120px;
+      flex-shrink: 0;
+      font-weight: 600;
+      color: var(--primary-dark);
+    }
+    
+    .profile-value {
+      flex-grow: 1;
+    }
+    
+    .borrower-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    
+    .borrower-link:hover {
+      color: var(--secondary);
+      text-decoration: underline;
+    }
 
     @media (max-width: 900px) {
       .item-details {
@@ -664,7 +769,17 @@ function arabic_ago($date) {
                 $arabic    = $statusMap[$statusKey] ?? $statusKey;
               ?>
               <tr>
-                <td><?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?></td>
+                <td>
+                  <a class="borrower-link" onclick="showBorrowerProfile(
+                    '<?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?>',
+                    '<?= htmlspecialchars($r['email']) ?>',
+                    '<?= htmlspecialchars($r['phone']) ?>',
+                    '<?= htmlspecialchars($r['address']) ?>'
+                  )">
+                    <?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?>
+                    <i class="fas fa-user-circle ml-2"></i>
+                  </a>
+                </td>
                 <td><?= date('Y/m/d', strtotime($r['start_date'])) ?></td>
                 <td><?= date('Y/m/d', strtotime($r['end_date'])) ?></td>
                 <td>
@@ -718,7 +833,17 @@ function arabic_ago($date) {
           <div class="reservation-card">
             <div class="card-row">
               <span>الاسم:</span>
-              <span><?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?></span>
+              <span>
+                <a class="borrower-link" onclick="showBorrowerProfile(
+                  '<?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?>',
+                  '<?= htmlspecialchars($r['email']) ?>',
+                  '<?= htmlspecialchars($r['phone']) ?>',
+                  '<?= htmlspecialchars($r['address']) ?>'
+                )">
+                  <?= htmlspecialchars($r['first_name'] . ' ' . $r['last_name']) ?>
+                  <i class="fas fa-user-circle ml-2"></i>
+                </a>
+              </span>
             </div>
             <div class="card-row">
               <span>بداية الحجز:</span>
@@ -791,6 +916,36 @@ function arabic_ago($date) {
       <?php endif; ?>
     </section>
   </div>
+  
+  <!-- Borrower Profile Modal -->
+  <div id="borrowerModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>تفاصيل المستعير</h3>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="profile-info">
+          <div class="profile-row">
+            <span class="profile-label">الاسم:</span>
+            <span class="profile-value" id="borrowerName"></span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">البريد الإلكتروني:</span>
+            <span class="profile-value" id="borrowerEmail"></span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">رقم الهاتف:</span>
+            <span class="profile-value" id="borrowerPhone"></span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">العنوان:</span>
+            <span class="profile-value" id="borrowerAddress"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     // Add animation to cards on load
@@ -803,6 +958,39 @@ function arabic_ago($date) {
         }, 150 * index);
       });
     });
+    
+    // Borrower profile modal functions
+    function showBorrowerProfile(name, email, phone, realAddress) {
+      document.getElementById('borrowerName').textContent = name;
+      document.getElementById('borrowerEmail').textContent = email || 'غير متوفر';
+      document.getElementById('borrowerPhone').textContent = phone || 'غير متوفر';
+      document.getElementById('borrowerAddress').innerHTML =
+        realAddress
+          ? `<iframe
+              width="100%"
+              height="300"
+              style="border:0; border-radius: 8px;"
+              loading="lazy"
+              allowfullscreen
+              referrerpolicy="no-referrer-when-downgrade"
+              src="${realAddress}&output=embed">
+            </iframe>`
+          : 'غير متوفر';
+
+      document.getElementById('borrowerModal').style.display = 'flex';
+    }
+    
+    function closeModal() {
+      document.getElementById('borrowerModal').style.display = 'none';
+    }
+    
+    // Close modal when clicking outside content
+    window.onclick = function(event) {
+      const modal = document.getElementById('borrowerModal');
+      if (event.target === modal) {
+        closeModal();
+      }
+    }
   </script>
 </body>
 </html>
